@@ -66,11 +66,20 @@ class Analysis {
 
   def ausDf_=(_val : DataFrame): Unit = _ausDf = _val;
 
-  def vaccineCount: DataFrame = {
+  def vaccineCount: DataFrame =
     _usDf.select("Country", "VaccinationType")
       .union(_indDf.select("Country", "VaccinationType"))
       .union(_ausDf.select("Country", "VaccinationType"))
       .groupBy("Country", "VaccinationType")
       .agg(count(lit(1)).alias("VaccineCount"));
-  };
+
+  def vaccinatedPerc: DataFrame =
+    val fullDf: DataFrame = _usDf.select("Country")
+      .union(_indDf.select("Country"))
+      .union(_ausDf.select("Country"));
+
+    val totalPopulation: Long = fullDf.count();
+
+    fullDf.groupBy("Country")
+      .agg((count(lit(1)) * 100 / totalPopulation).alias("PercentageVaccinated"));
 }
