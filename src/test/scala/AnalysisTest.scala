@@ -4,6 +4,9 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructT
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.scalatest.funsuite.AnyFunSuite
 
+import java.io.FileNotFoundException
+import scala.reflect.io.File
+
 class AnalysisTest extends AnyFunSuite{
   val spark: SparkSession = SparkSession.builder()
     .appName("VaccineAnalysis")
@@ -37,8 +40,18 @@ class AnalysisTest extends AnyFunSuite{
     StructField("Country", StringType, false)
   ));
 
+  val crctBasePath: String = "/Users/robyjacob/Downloads/Incubyte DE Assessment/SampleInputData";
+
   test("Analysis") {
-    val analysis: Analysis = new Analysis();
+    val wrongBasePath: String = "/Users/robyjacob/Downloads/Incubyte DE Assessment/SampleInputDat";
+
+    assertThrows[FileNotFoundException] (new Analysis(wrongBasePath));
+
+    val analysis: Analysis = new Analysis(crctBasePath);
+
+    assertThrows[NullPointerException] (analysis.usDf = null);
+    assertThrows[NullPointerException] (analysis.indDf = null);
+    assertThrows[NullPointerException] (analysis.ausDf = null);
 
     assert(analysis.usDf.schema == usDfSchema);
     assert(analysis.indDf.schema == indDfSchema);
@@ -46,7 +59,7 @@ class AnalysisTest extends AnyFunSuite{
   }
 
   test("Analysis.vaccineCount") {
-    val analysis : Analysis = new Analysis();
+    val analysis : Analysis = new Analysis(crctBasePath);
 
     val usDfData: List[Row] = List(
       Row(1, "Roby", "MNO", "12282021", "USA"),
@@ -85,7 +98,7 @@ class AnalysisTest extends AnyFunSuite{
   }
 
   test("Analysis.vaccinatedPerc") {
-    val analysis : Analysis = new Analysis();
+    val analysis : Analysis = new Analysis(crctBasePath);
 
     val usDfData: List[Row] = List(
       Row(1, "Roby", "MNO", "12282021", "USA"),

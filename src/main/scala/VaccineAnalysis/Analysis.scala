@@ -2,9 +2,15 @@ package VaccineAnalysis
 
 import org.apache.spark.sql.functions.{count, lit}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
-import org.apache.spark.sql.{DataFrame, SparkSession};
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
-class Analysis {
+import java.io.FileNotFoundException
+import scala.reflect.io.File
+
+class Analysis(basePath: String) {
+  if (!File(basePath).exists)
+    throw new FileNotFoundException(s"$basePath does not exist");
+
   private val spark: SparkSession = SparkSession.builder()
     .appName("VaccineAnalysis")
     .master("local[2]")
@@ -35,24 +41,47 @@ class Analysis {
     StructField("VaccinationDate", StringType, true)
   ));
 
-  private var _usDf: DataFrame = spark.read
-    .format("csv")
-    .schema(usDfSchema)
-    .load("/Users/robyjacob/Downloads/Incubyte DE Assessment/SampleInputData/USA.csv")
-    .withColumn("Country", lit("USA"));
+  private var _usDf: DataFrame = {
+    val path: String = s"$basePath/USA.csv";
 
-  private var _indDf: DataFrame = spark.read
-    .format("csv")
-    .schema(indDfSchema)
-    .load("/Users/robyjacob/Downloads/Incubyte DE Assessment/SampleInputData/IND.csv")
-    .withColumn("Country", lit("IND"));
+    if (!File(path).exists)
+      throw new FileNotFoundException(s"$path does not exist");
 
-  private var _ausDf: DataFrame = spark.read
-    .format("com.crealytics.spark.excel")
-    .option("header", true)
-    .schema(ausDfSchema)
-    .load("/Users/robyjacob/Downloads/Incubyte DE Assessment/SampleInputData/AUS.xlsx")
-    .withColumn("Country", lit("AUS"));
+    spark.read
+      .format("csv")
+      .option("header", true)
+      .schema(usDfSchema)
+      .load(path)
+      .withColumn("Country", lit("USA"))
+  };
+
+  private var _indDf: DataFrame = {
+    val path: String = s"$basePath/IND.csv";
+
+    if (!File(path).exists)
+      throw new FileNotFoundException(s"$path does not exist");
+
+    spark.read
+      .format("csv")
+      .option("header", true)
+      .schema(indDfSchema)
+      .load(path)
+      .withColumn("Country", lit("IND"))
+  };
+
+  private var _ausDf: DataFrame = {
+    val path: String = s"$basePath/AUS.xlsx";
+
+    if (!File(path).exists)
+      throw new FileNotFoundException(s"$path does not exist");
+
+    spark.read
+      .format("com.crealytics.spark.excel")
+      .option("header", true)
+      .schema(ausDfSchema)
+      .load(path)
+      .withColumn("Country", lit("AUS"))
+  };
 
   def usDf: DataFrame = _usDf;
 
@@ -60,11 +89,26 @@ class Analysis {
 
   def ausDf: DataFrame = _ausDf;
 
-  def usDf_=(_val : DataFrame): Unit = _usDf = _val;
+  def usDf_=(_val : DataFrame): Unit = {
+    if (_val == null)
+      throw new NullPointerException("Input is null");
 
-  def indDf_=(_val : DataFrame): Unit = _indDf = _val;
+    _usDf = _val;
+  };
 
-  def ausDf_=(_val : DataFrame): Unit = _ausDf = _val;
+  def indDf_=(_val : DataFrame): Unit = {
+    if (_val == null)
+      throw new NullPointerException("Input is null");
+
+    _indDf = _val;
+  };
+
+  def ausDf_=(_val : DataFrame): Unit = {
+    if (_val == null)
+      throw new NullPointerException("Input is null");
+
+    _ausDf = _val;
+  };
 
   def vaccineCount: DataFrame =
     _usDf.select("Country", "VaccinationType")
@@ -73,7 +117,7 @@ class Analysis {
       .groupBy("Country", "VaccinationType")
       .agg(count(lit(1)).alias("VaccineCount"));
 
-  def vaccinatedPerc: DataFrame =
+  def vaccinatedPerc: DataFrame = {
     val fullDf: DataFrame = _usDf.select("Country")
       .union(_indDf.select("Country"))
       .union(_ausDf.select("Country"));
@@ -82,4 +126,24 @@ class Analysis {
 
     fullDf.groupBy("Country")
       .agg((count(lit(1)) * 100 / totalPopulation).alias("PercentageVaccinated"));
+  };
+
+  def run: DataFrame = {
+    val fullDf: DataFrame = _usDf.select("Country", "VaccinationType")
+      .union(_indDf.select("Country", "VaccinationType"))
+      .union(_ausDf.select("Country", "VaccinationType"));
+
+    fullDf.createOrReplaceTempView("country_vaccines");
+
+    spark.sql(
+      """
+        |SELECT
+        |Country,
+        |VaccinationType,
+        |COUNT(*) OVER(PARTITION BY Country,VaccinationType) AS NoOfVaccinations,
+        |(COUNT(*) OVER(PARTITION BY Country)) * 100 / COUNT(*) OVER() AS PercentageVaccinated,
+        |(COUNT(*) OVER(PARTITION BY Country,VaccinationType)) * 100 / COUNT(*) OVER() AS PercentageVaccineContribution
+        |FROM country_vaccines
+        |""".stripMargin).distinct();
+  }
 }
