@@ -1,4 +1,5 @@
 import VaccineAnalysis.Analysis
+import org.apache.spark.sql.functions.{count, lit}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.scalatest.funsuite.AnyFunSuite
@@ -47,7 +48,7 @@ class AnalysisTest extends AnyFunSuite{
   test("Analysis.vaccineCount") {
     val analysis : Analysis = new Analysis();
 
-    val usDfData: Seq[Row] = Seq(
+    val usDfData: List[Row] = List(
       Row(1, "Roby", "MNO", "12282021", "USA"),
       Row(2, "Rahul", "ABC", "06152022", "USA")
     );
@@ -58,9 +59,28 @@ class AnalysisTest extends AnyFunSuite{
 
     val ausDfData: List[Row] = List(
       Row(1, "Sameer", "MNO", "1952-08-13", "2022-02-20", "AUS"),
-      Row(2, "Vikas", "ABC", "1998-12-01", "2022-03-05", "AUS")
+      Row(2, "Vikas", "MNO", "1998-12-01", "2022-03-05", "AUS")
     );
 
-    val usDF: DataFrame = spark.createDataFrame(usDfData, usDfSchema);
+    val usDF: DataFrame = spark.createDataFrame(
+      spark.sparkContext.parallelize(usDfData), usDfSchema);
+
+    val indDf: DataFrame = spark.createDataFrame(
+      spark.sparkContext.parallelize(indDfData), indDfSchema);
+
+    val ausDf: DataFrame = spark.createDataFrame(
+      spark.sparkContext.parallelize(ausDfData), ausDfSchema);
+
+    analysis.usDf = usDF;
+    analysis.indDf = indDf;
+    analysis.ausDf = ausDf;
+
+    val resDf: DataFrame = usDF.select("Country", "VaccinationType")
+      .union(indDf.select("Country", "VaccinationType"))
+      .union(ausDf.select("Country", "VaccinationType"))
+      .groupBy("Country", "VaccinationType")
+      .agg(count(lit(1)).alias("VaccineCount"));
+
+    assert(analysis.vaccineCount.collectAsList() == resDf.collectAsList());
   }
 }
