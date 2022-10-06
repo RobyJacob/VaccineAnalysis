@@ -133,7 +133,7 @@ class Analysis(basePath: String) {
       .union(_indDf.select("Country", "VaccinationType"))
       .union(_ausDf.select("Country", "VaccinationType"));
 
-    fullDf.createOrReplaceTempView("country_vaccines");
+    fullDf.createOrReplaceTempView("vaccine_analysis");
 
     spark.sql(
       """
@@ -143,7 +143,7 @@ class Analysis(basePath: String) {
         |COUNT(*) OVER(PARTITION BY Country,VaccinationType) AS NoOfVaccinations,
         |(COUNT(*) OVER(PARTITION BY Country)) * 100 / COUNT(*) OVER() AS PercentageVaccinated,
         |(COUNT(*) OVER(PARTITION BY Country,VaccinationType)) * 100 / COUNT(*) OVER() AS PercentageVaccineContribution
-        |FROM country_vaccines
+        |FROM vaccine_analysis
         |""".stripMargin).distinct();
   }
 }
